@@ -1,5 +1,5 @@
 plugins {
-    id 'fabric-loom' version '1.14-SNAPSHOT'
+    id 'fabric-loom' version '1.14.10'
     id 'maven-publish'
 }
 
@@ -8,6 +8,16 @@ group = project.maven_group
 
 base {
     archivesName = project.archives_base_name
+}
+
+repositories {
+    maven {
+        url = "https://maven.fabricmc.net/"
+    }
+    maven {
+        url = "https://repo.lucko.me/"
+    }
+    mavenCentral()
 }
 
 dependencies {
@@ -27,8 +37,8 @@ java {
 }
 
 tasks.withType(JavaCompile).configureEach {
-    it.options.release = 21
-    it.options.encoding = "UTF-8"
+    options.release = 21
+    options.encoding = "UTF-8"
 }
 
 processResources {

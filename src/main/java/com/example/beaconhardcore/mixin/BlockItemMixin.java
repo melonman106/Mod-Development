@@ -2,13 +2,13 @@ package com.example.beaconhardcore.mixin;
 
 import com.example.beaconhardcore.BeaconHardcoreMod;
 import com.example.beaconhardcore.BeaconOwnershipManager;
-import net.minecraft.core.BlockPos;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.InteractionResult;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.item.BlockItem;
+import net.minecraft.item.ItemPlacementContext;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.ActionResult;
+import net.minecraft.util.math.BlockPos;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -17,22 +17,21 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(BlockItem.class)
 public abstract class BlockItemMixin {
 
-    @Inject(method = "useOn", at = @At("RETURN"))
-    private void beaconhardcore$storeOwner(UseOnContext context, CallbackInfoReturnable<InteractionResult> cir) {
-        if (!cir.getReturnValue().consumesAction()) return;
-        if (context.getLevel().isClientSide()) return;
+    @Inject(method = "place", at = @At("RETURN"))
+    private void beaconhardcore$storeOwner(ItemPlacementContext context, CallbackInfoReturnable<ActionResult> cir) {
+        if (!cir.getReturnValue().isAccepted()) return;
+        if (context.getWorld().isClient()) return;
 
-        ItemStack stack = context.getItemInHand();
-        if (!stack.is(Items.BEACON)) return;
-        if (stack.getTag() == null) return;
-        if (!stack.getTag().containsUUID(BeaconHardcoreMod.BEACON_OWNER_NBT)) return;
+        ItemStack stack = context.getStack();
+        if (!stack.isOf(Items.BEACON)) return;
+        if (stack.getNbt() == null || !stack.getNbt().containsUuid(BeaconHardcoreMod.BEACON_OWNER_NBT)) return;
 
-        if (context.getLevel() instanceof ServerLevel serverLevel) {
-            BlockPos placePos = context.getClickedPos().relative(context.getClickedFace());
+        if (context.getWorld() instanceof ServerWorld serverWorld) {
+            BlockPos placePos = context.getBlockPos();
             BeaconOwnershipManager.setOwner(
-                    serverLevel,
+                    serverWorld,
                     placePos,
-                    stack.getTag().getUUID(BeaconHardcoreMod.BEACON_OWNER_NBT)
+                    stack.getNbt().getUuid(BeaconHardcoreMod.BEACON_OWNER_NBT)
             );
         }
     }

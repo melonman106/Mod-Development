@@ -1,6 +1,5 @@
 package com.example.beaconhardcore;
 
-import com.mojang.authlib.GameProfile;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
@@ -9,25 +8,24 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.luckperms.api.LuckPermsProvider;
 import net.luckperms.api.model.user.User;
 import net.luckperms.api.node.Node;
-import net.minecraft.ChatFormatting;
-import net.minecraft.commands.Commands;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
-import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
-import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
+import net.minecraft.block.Blocks;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.level.GameType;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.core.BlockPos;
+import net.minecraft.server.command.CommandManager;
+import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
+import net.minecraft.world.GameMode;
+import net.minecraft.util.math.BlockPos;
 
 import java.util.UUID;
 
+import static net.minecraft.server.command.CommandManager.literal;
+
 public class BeaconHardcoreMod implements ModInitializer {
+    public static final String DOOMED_TAG = "beacon_doomed";
     public static final String BEACON_OWNER_NBT = "BeaconOwner";
     public static final String BEACON_USE_PERMISSION = "beaconhardcore.beacon";
     public static final String DOOMED_PERMISSION = "beaconhardcore.doomed";
@@ -35,102 +33,91 @@ public class BeaconHardcoreMod implements ModInitializer {
     @Override
     public void onInitialize() {
 
-        // /beacon
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            dispatcher.register(Commands.literal("beacon").executes(context -> {
-                ServerPlayer player = context.getSource().getPlayerOrException();
+            dispatcher.register(literal("beacon").executes(context -> {
+                ServerPlayerEntity player = context.getSource().getPlayer();
 
                 if (!hasLuckPermsPermission(player, BEACON_USE_PERMISSION)) {
-                    player.displayClientMessage(
-                            Component.literal("You do not have permission to use /beacon.")
-                                    .withStyle(ChatFormatting.RED),
+                    player.sendMessage(
+                            Text.literal("You do not have permission to use /beacon.")
+                                    .formatted(Formatting.RED),
                             false
                     );
                     return 0;
                 }
 
                 ItemStack beacon = new ItemStack(Items.BEACON);
-                beacon.getOrCreateTag().putUUID(BEACON_OWNER_NBT, player.getUUID());
+                beacon.getOrCreateNbt().putUuid(BEACON_OWNER_NBT, player.getUuid());
 
-                if (!player.getInventory().add(beacon)) {
-                    player.drop(beacon, false);
+                if (!player.getInventory().insertStack(beacon)) {
+                    player.dropItem(beacon, false);
                 }
 
-                player.displayClientMessage(
-                        Component.literal("You received your special beacon.")
-                                .withStyle(ChatFormatting.GREEN),
+                player.sendMessage(
+                        Text.literal("You received your special beacon.")
+                                .formatted(Formatting.GREEN),
                         false
                 );
-
                 return 1;
             }));
         });
 
-        // If any player breaks a beacon, doom the owner
-        PlayerBlockBreakEvents.AFTER.register((level, player, pos, state, blockEntity) -> {
-            if (!(level instanceof ServerLevel serverLevel)) return;
-            if (!state.is(Blocks.BEACON)) return;
+        PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, blockEntity) -> {
+            if (!(world instanceof ServerWorld serverWorld)) return;
+            if (!state.isOf(Blocks.BEACON)) return;
 
-            UUID ownerUuid = BeaconOwnershipManager.getOwner(serverLevel, pos);
+            UUID ownerUuid = BeaconOwnershipManager.getOwner(serverWorld, pos);
             if (ownerUuid == null) return;
 
-            BeaconOwnershipManager.removeOwner(serverLevel, pos);
+            BeaconOwnershipManager.removeOwner(serverWorld, pos);
 
-            MinecraftServer server = serverLevel.getServer();
-            ServerPlayer ownerPlayer = server.getPlayerList().getPlayer(ownerUuid);
+            MinecraftServer server = serverWorld.getServer();
+            ServerPlayerEntity ownerPlayer = server.getPlayerManager().getPlayer(ownerUuid);
 
-            String ownerName;
+            String ownerName = ownerPlayer != null ? ownerPlayer.getName().getString() : ownerUuid.toString();
+
+            markDoomed(ownerUuid);
+
             if (ownerPlayer != null) {
-                ownerName = ownerPlayer.getGameProfile().getName();
-            } else {
-                ownerName = getOfflineName(ownerUuid);
-            }
-
-            markDoomed(server, ownerUuid);
-
-            // Big red title for the owner if they are online
-            if (ownerPlayer != null) {
-                showDoomedTitle(ownerPlayer, ownerName);
-                ownerPlayer.displayClientMessage(
-                        Component.literal("Your beacon was broken. You will become a spectator when you next die.")
-                                .withStyle(ChatFormatting.RED),
+                showDoomedTitle(server, ownerPlayer, ownerName);
+                ownerPlayer.sendMessage(
+                        Text.literal("Your beacon was broken. You will become a spectator when you next die.")
+                                .formatted(Formatting.RED),
                         false
                 );
             }
 
-            // Everyone knows
-            server.getPlayerList().broadcastSystemMessage(
-                    Component.literal(ownerName + "'s beacon was broken! " + ownerName + " is now doomed!")
-                            .withStyle(ChatFormatting.RED),
+            server.getPlayerManager().broadcast(
+                    Text.literal(ownerName + "'s beacon was broken! " + ownerName + " is now doomed!")
+                            .formatted(Formatting.RED),
                     false
             );
         });
 
-        // After respawn, if doomed, switch to spectator
         ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
-            if (isDoomed(newPlayer.getServer(), newPlayer.getUUID())) {
-                newPlayer.setGameMode(GameType.SPECTATOR);
-                newPlayer.displayClientMessage(
-                        Component.literal("You have died and are now in Spectator mode.")
-                                .withStyle(ChatFormatting.RED),
+            if (isDoomed(newPlayer.getUuid())) {
+                newPlayer.changeGameMode(GameMode.SPECTATOR);
+                newPlayer.sendMessage(
+                        Text.literal("You have died and are now in Spectator mode.")
+                                .formatted(Formatting.RED),
                         false
                 );
             }
         });
     }
 
-    private boolean hasLuckPermsPermission(ServerPlayer player, String permission) {
+    private boolean hasLuckPermsPermission(ServerPlayerEntity player, String permission) {
         if (!FabricLoader.getInstance().isModLoaded("luckperms")) {
             return false;
         }
 
-        User user = getLuckPermsUser(player.getUUID());
+        User user = getLuckPermsUser(player.getUuid());
         if (user == null) return false;
 
         return user.getCachedData().getPermissionData().checkPermission(permission).asBoolean();
     }
 
-    private void markDoomed(MinecraftServer server, UUID playerUuid) {
+    private void markDoomed(UUID playerUuid) {
         if (!FabricLoader.getInstance().isModLoaded("luckperms")) {
             return;
         }
@@ -142,7 +129,7 @@ public class BeaconHardcoreMod implements ModInitializer {
         LuckPermsProvider.get().getUserManager().saveUser(user);
     }
 
-    private boolean isDoomed(MinecraftServer server, UUID playerUuid) {
+    private boolean isDoomed(UUID playerUuid) {
         if (!FabricLoader.getInstance().isModLoaded("luckperms")) {
             return false;
         }
@@ -164,20 +151,27 @@ public class BeaconHardcoreMod implements ModInitializer {
         }
     }
 
-    private void showDoomedTitle(ServerPlayer player, String ownerName) {
-        Component title = Component.literal(ownerName + " has be doomed!")
-                .withStyle(ChatFormatting.RED, ChatFormatting.BOLD);
+    private void showDoomedTitle(MinecraftServer server, ServerPlayerEntity player, String ownerName) {
+        String titleJson = "{\"text\":\"" + escapeJson(ownerName + " has be doomed!") + "\",\"color\":\"red\",\"bold\":true}";
+        String subtitleJson = "{\"text\":\"Your beacon was broken.\",\"color\":\"red\"}";
 
-        Component subtitle = Component.literal("Your beacon was broken.")
-                .withStyle(ChatFormatting.RED);
+        server.getCommandManager().executeWithPrefix(
+                server.getCommandSource().withLevel(4),
+                "title " + player.getName().getString() + " times 10 70 20"
+        );
 
-        player.connection.send(new ClientboundSetTitlesAnimationPacket(10, 70, 20));
-        player.connection.send(new ClientboundSetTitleTextPacket(title));
-        player.connection.send(new ClientboundSetSubtitleTextPacket(subtitle));
+        server.getCommandManager().executeWithPrefix(
+                server.getCommandSource().withLevel(4),
+                "title " + player.getName().getString() + " title " + titleJson
+        );
+
+        server.getCommandManager().executeWithPrefix(
+                server.getCommandSource().withLevel(4),
+                "title " + player.getName().getString() + " subtitle " + subtitleJson
+        );
     }
 
-    private String getOfflineName(UUID uuid) {
-        GameProfile profile = new GameProfile(uuid, "A player");
-        return profile.getName();
+    private String escapeJson(String text) {
+        return text.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }
