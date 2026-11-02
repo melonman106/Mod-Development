@@ -1,5 +1,8 @@
 package com.example.beaconhardcore;
 
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.NbtComponent;
+import net.minecraft.nbt.NbtCompound;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
@@ -46,9 +49,11 @@ public class BeaconHardcoreMod implements ModInitializer {
                     return 0;
                 }
 
-                ItemStack beacon = new ItemStack(Items.BEACON);
-                beacon.getOrCreateNbt().putUuid(BEACON_OWNER_NBT, player.getUuid());
+               ItemStack beacon = new ItemStack(Items.BEACON);
 
+                    NbtCompound data = new NbtCompound();
+                    data.putUuid(BEACON_OWNER_NBT, player.getUuid());
+                    beacon.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(data));
                 if (!player.getInventory().insertStack(beacon)) {
                     player.dropItem(beacon, false);
                 }

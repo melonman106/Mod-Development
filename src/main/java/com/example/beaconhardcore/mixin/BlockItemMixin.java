@@ -1,5 +1,8 @@
 package com.example.beaconhardcore.mixin;
 
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.NbtComponent;
+import net.minecraft.nbt.NbtCompound;
 import com.example.beaconhardcore.BeaconHardcoreMod;
 import com.example.beaconhardcore.BeaconOwnershipManager;
 import net.minecraft.item.BlockItem;
@@ -23,15 +26,20 @@ public abstract class BlockItemMixin {
         if (context.getWorld().isClient()) return;
 
         ItemStack stack = context.getStack();
-        if (!stack.isOf(Items.BEACON)) return;
-        if (stack.getNbt() == null || !stack.getNbt().containsUuid(BeaconHardcoreMod.BEACON_OWNER_NBT)) return;
+        if (!stack.isOf(Items.BEACON)) return;NbtComponent customData = stack.get(DataComponentTypes.CUSTOM_DATA);
+if (customData == null) return;
+
+NbtCompound data = customData.copyNbt();
+if (!data.containsUuid(BeaconHardcoreMod.BEACON_OWNER_NBT)) return;
+        
 
         if (context.getWorld() instanceof ServerWorld serverWorld) {
             BlockPos placePos = context.getBlockPos();
             BeaconOwnershipManager.setOwner(
                     serverWorld,
                     placePos,
-                    stack.getNbt().getUuid(BeaconHardcoreMod.BEACON_OWNER_NBT)
+                    data.getUuid(BeaconHardcoreMod.BEACON_OWNER_NBT)
+
             );
         }
     }
