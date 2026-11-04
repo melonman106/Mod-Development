@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "package": "com.example.targetdummy.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "ArmorStandItemMixin",
+    "ArmorStandDamageMixin",
+    "ArmorStandPickupMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
