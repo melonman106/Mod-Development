@@ -2,7 +2,7 @@ name: Build Mod
 
 on:
   push:
-    branches: ["Target-Dummy-(26.2)"]
+    branches: ["hide-or-hunt-(1.21.1)"]
   pull_request:
   workflow_dispatch:
 
