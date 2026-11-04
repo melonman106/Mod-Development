@@ -1,23 +1,22 @@
 {
   "schemaVersion": 1,
-  "id": "beaconhardcore",
+  "id": "targetdummy",
   "version": "${version}",
-  "name": "Beacon Hardcore",
-  "description": "Gives a special beacon with /beacon, marks the owner as doomed when it is broken, and sends them to Spectator on next death.",
+  "name": "Target Dummy",
+  "description": "Adds a craftable target dummy with floating damage numbers.",
   "authors": ["You"],
   "environment": "*",
   "entrypoints": {
     "main": [
-      "com.example.beaconhardcore.BeaconHardcoreMod"
+      "com.example.targetdummy.TargetDummyMod"
     ]
   },
   "mixins": [
-    "beaconhardcore.mixins.json"
+    "targetdummy.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=0.18.1",
     "fabric-api": "*",
-    "minecraft": "1.21.1",
-    "luckperms": "*"
+    "minecraft": "26.2"
   }
 }
